@@ -530,6 +530,30 @@
     });
   }
 
+  /** Save a user message to chatHistory (interceptor-based, deduped). */
+  async function recordUserMessage(raw) {
+    if (!raw || raw.length < 1) return;
+    const norm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!norm) return;
+    try {
+      if (!contextAlive()) return;
+      const d = await storageGet(['chatHistory', 'totalMessageCount']);
+      const hist = d.chatHistory || [];
+      // Dedup: skip if the last user entry in history matches
+      for (let i = hist.length - 1; i >= Math.max(0, hist.length - 3); i--) {
+        if (hist[i].role !== 'user') continue;
+        const exNorm = hist[i].text.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (exNorm === norm) return; // exact dupe
+        break; // only check last user entry
+      }
+      hist.push({ role: 'user', text: raw, timestamp: Date.now() });
+      const newT = (d.totalMessageCount || 0) + 1;
+      await storageSet({ chatHistory: hist, totalMessageCount: newT });
+      if (cache) { cache.chatHistory = hist; cache.totalMessageCount = newT; }
+      log('\u2713 User message recorded:', raw.substring(0, 60));
+    } catch (e) { warn('recordUserMessage error:', e); }
+  }
+
   /** Core inject: scan + assemble + replace + save history */
   function doInject(editor, raw, embedding) {
     if (cache && cache.extensionEnabled === false) {
@@ -615,6 +639,10 @@
         if (!editor) { warn('Hook fired but editor NOT FOUND'); return; }
         const raw = readEditor(editor);
         if (!raw) { log('Hook fired but editor is empty'); return; }
+
+        // Always record the user message
+        recordUserMessage(raw);
+
         if (!cache || !cache.activeCard) { log('Hook fired but no active card — pass-through'); return; }
 
         log('Hook fired! raw:', raw.substring(0, 40), '| vectorized:', hasVectorizedEntries());
@@ -646,7 +674,12 @@
           const editor = q(SEL.editor);
           if (!editor) return;
           const raw = readEditor(editor);
-          if (!raw || !cache || !cache.activeCard) return;
+          if (!raw) return;
+
+          // Always record the user message
+          recordUserMessage(raw);
+
+          if (!cache || !cache.activeCard) return;
 
           log('Form submit hook! raw:', raw.substring(0, 40));
 
@@ -693,7 +726,12 @@
       if (a !== editor && !editor.contains(a)) return;
 
       const raw = readEditor(editor);
-      if (!raw || !cache || !cache.activeCard) return;
+      if (!raw) return;
+
+      // Always record the user message
+      recordUserMessage(raw);
+
+      if (!cache || !cache.activeCard) return;
 
       log('Enter key hook! raw:', raw.substring(0, 40));
 
@@ -741,9 +779,13 @@
      *   "Free model | | Cost: Free"
      *   "GPT-4o | 7:43 AM | Cost: $0.002"
      *   "Claude 3.5 Sonnet | 8:01 PM | Cost: Free"
-     * Stops after the first word/token following "Cost:".
+     *
+     * Model-name portion uses [\w .\-+\/] (NO punctuation like !?;:,)
+     * so that user messages containing punctuation stop the match and
+     * prevent "AM tu peux me tutoyer! Free model |..." from being
+     * swallowed as one giant model name.
      */
-    const MODEL_HEADER_RE = /[A-Za-z][^|]{0,60}\|[^|]*\|\s*Cost:\s*\S+/g;
+    const MODEL_HEADER_RE = /[A-Za-z][\w .\-+\/]{0,30}\s*\|\s*[^|]{0,25}\|\s*Cost:\s*\S+/g;
 
     /** Get the full innerText of NanoGPT's conversation area. */
     function getConversationText() {
@@ -874,13 +916,33 @@
         const seg = segments[i];
         if (!seg || seg.trim().length < 1) continue;
 
-        MODEL_HEADER_RE.lastIndex = 0;
-        const hm = MODEL_HEADER_RE.exec(seg);
-
-        const userRaw = hm ? seg.slice(0, hm.index).trim() : seg.trim();
+        // Use '| Cost:' as unambiguous anchor, then walk backwards to find
+        // the model-name boundary (stops at punctuation like ! ? , ; : etc.)
+        const costIdx = seg.search(/\|\s*Cost:/i);
+        let userRaw;
+        if (costIdx >= 0) {
+          // Find the time-separator pipe: the last '|' before '| Cost:'
+          const beforeCost = seg.slice(0, costIdx);
+          const timePipe = beforeCost.lastIndexOf('|');
+          if (timePipe >= 0) {
+            // Model name is at the end of text before the time pipe.
+            // Scan backwards from timePipe, stopping at user-text punctuation.
+            const pre = seg.slice(0, timePipe).trimEnd();
+            let nameStart = pre.length;
+            for (let j = pre.length - 1; j >= 0; j--) {
+              if (/[\w .\-+\/]/.test(pre[j])) nameStart = j;
+              else break;
+            }
+            userRaw = pre.slice(0, nameStart).trim();
+          } else {
+            userRaw = seg.trim();
+          }
+        } else {
+          userRaw = seg.trim();
+        }
         const clean = cleanUserText(userRaw);
 
-        if (clean.length >= 1) turns.push({ raw: userRaw, clean });
+        if (clean.length >= 2) turns.push({ raw: userRaw, clean });
       }
       return turns;
     }
@@ -888,23 +950,28 @@
     // Dedup set stores NORMALIZED keys so slight variations don't create duplicates
     const capturedModelNorms = new Set();
     const capturedUserNorms  = new Set();
-    const capturedUserNormsArr = []; // kept as array for prefix-overlap checking
 
     /**
-     * Returns true if norm should be skipped because it is a truncated/extended
-     * duplicate of something already captured.
-     * - existing.startsWith(norm)  → existing is fuller, new is a prefix → skip
-     * - norm.startsWith(existing)  → new is fuller → remove old, allow new
+     * Check if a normalized user message is a duplicate.
+     * Only considers prefix relationships when the shorter string is at least
+     * 70% of the longer string's length (prevents 'dit moi' being blocked
+     * by 'dit moi une phrase courte...').
      */
     function checkUserDuplicate(norm) {
-      if (capturedUserNorms.has(norm)) return true; // exact match
-      for (let i = 0; i < capturedUserNormsArr.length; i++) {
-        const ex = capturedUserNormsArr[i];
-        if (ex.startsWith(norm)) return true;      // new is truncated prefix of existing → skip
-        if (norm.startsWith(ex)) {                  // new is fuller than existing → replace
+      if (capturedUserNorms.has(norm)) return true;
+      for (const ex of capturedUserNorms) {
+        const shorter = Math.min(ex.length, norm.length);
+        const longer  = Math.max(ex.length, norm.length);
+        // Only consider prefix relationship when lengths are similar (>= 65%).
+        // Prevents 'dit moi' (7 chars) from matching
+        // 'dit moi une phrase courte...' (50+ chars).
+        if (shorter / longer < 0.65) continue;
+        if (ex.startsWith(norm)) return true; // new is truncated prefix → skip
+        if (norm.startsWith(ex)) {
+          // new is longer/fuller — replace existing with the fuller version
           capturedUserNorms.delete(ex);
-          capturedUserNormsArr.splice(i, 1);
-          break;
+          capturedUserNorms.add(norm);
+          return false; // save the fuller version
         }
       }
       return false;
@@ -920,7 +987,6 @@
       if (!norm || norm.length < 1) return;
       if (checkUserDuplicate(norm)) return;
       capturedUserNorms.add(norm);
-      capturedUserNormsArr.push(norm);
       try {
         if (!contextAlive()) return;
         const d = await storageGet(['chatHistory', 'totalMessageCount']);
@@ -929,7 +995,11 @@
         const lastUser = [...hist].reverse().find(e => e.role === 'user');
         if (lastUser) {
           const lastNorm = lastUser.text.toLowerCase().replace(/\s+/g, ' ').trim();
-          if (lastNorm === norm || lastNorm.startsWith(norm) || norm.startsWith(lastNorm)) return;
+          if (lastNorm === norm) return;
+          // Prefix dedup only when lengths are similar
+          const sLen = Math.min(lastNorm.length, norm.length);
+          const lLen = Math.max(lastNorm.length, norm.length);
+          if (sLen / lLen >= 0.65 && (lastNorm.startsWith(norm) || norm.startsWith(lastNorm))) return;
         }
         hist.push({ role: 'user', text: cleanText, timestamp: Date.now() });
         const newT = (d.totalMessageCount || 0) + 1;
@@ -1041,10 +1111,7 @@
       const userTurns = parseUserTurns(convText);
       userTurns.forEach(t => {
         const n = normalizeUser(t.raw);
-        if (n && !capturedUserNorms.has(n)) {
-          capturedUserNorms.add(n);
-          capturedUserNormsArr.push(n);
-        }
+        if (n) capturedUserNorms.add(n);
       });
       log('Baseline:', modelTurns.length, 'model +', userTurns.length, 'user turns indexed');
     }, 3000);
