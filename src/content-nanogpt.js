@@ -824,25 +824,63 @@
     }
 
     /**
+     * Clean user text: strip timestamps, reasoning leaks, and UI artifacts.
+     * Raw user segment looks like:
+     *   "8:32 AM Surprend moi ! Free model Reasoning. The user says..."
+     *   "8:31"
+     *   "salut !"
+     * We want only: "Surprend moi !", "salut !"
+     */
+    function cleanUserText(raw) {
+      let t = raw;
+
+      // Strip leading timestamp: "8:32 AM ", "8:32", "08:31:40", etc.
+      t = t.replace(/^\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\s*/i, '').trim();
+
+      // Strip everything from "Free model" onward (reasoning, thinking, UI artifacts)
+      t = t.replace(/\s*Free\s+model[\s\S]*/i, '').trim();
+
+      // Strip everything from "Reasoning" onward
+      t = t.replace(/\s*Reasoning[\s\S]*/i, '').trim();
+
+      // Strip everything from "Thinking" onward
+      t = t.replace(/\s*Thinking[\s\S]*/i, '').trim();
+
+      // Strip "Chat" + model name + percentage + UI
+      t = t.replace(/\s*Chat\s+[\s\S]*/i, '').trim();
+
+      // Strip trailing "Add balance..." / "Free model active..."
+      t = t.replace(/\s*Add\s+balance[\s\S]*/i, '').trim();
+      t = t.replace(/\s*\d+%\s*$/i, '').trim();
+
+      return t;
+    }
+
+    /** Normalize user text for dedup. */
+    function normalizeUser(text) {
+      return cleanUserText(text).toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    /**
      * Parse user turns from full conversation text.
-     * Format: "You | [user message] [ModelHeader...]"
-     * The user text is everything between "You |" and the next model header.
-     * Returns array of cleaned user message strings in chronological order.
+     * Format: "You | [timestamp?] [user message] [Free model Reasoning...?] [ModelHeader...]"
+     * Returns array of { raw, clean } objects in chronological order.
      */
     function parseUserTurns(fullText) {
       const turns = [];
       const segments = fullText.split(/\bYou\s*\|/);
 
-      for (let i = 1; i < segments.length; i++) { // skip segment 0 (before first "You |")
+      for (let i = 1; i < segments.length; i++) {
         const seg = segments[i];
         if (!seg || seg.trim().length < 1) continue;
 
         MODEL_HEADER_RE.lastIndex = 0;
         const hm = MODEL_HEADER_RE.exec(seg);
 
-        // User text = everything before the model header (or the whole segment if no header)
         const userRaw = hm ? seg.slice(0, hm.index).trim() : seg.trim();
-        if (userRaw.length >= 1) turns.push(userRaw);
+        const clean = cleanUserText(userRaw);
+
+        if (clean.length >= 1) turns.push({ raw: userRaw, clean });
       }
       return turns;
     }
@@ -855,23 +893,24 @@
     let wasDisabled   = false;
     let teardown;
 
-    /** Save a user message to chatHistory (deduped). */
-    async function saveUserMsg(text) {
-      const norm = text.toLowerCase().replace(/\s+/g, ' ').trim();
+    /** Save a cleaned user message to chatHistory (deduped via normalized text). */
+    async function saveUserMsg(cleanText) {
+      const norm = cleanText.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!norm || norm.length < 1) return;
       if (capturedUserNorms.has(norm)) return;
       capturedUserNorms.add(norm);
       try {
         if (!contextAlive()) return;
         const d = await storageGet(['chatHistory', 'totalMessageCount']);
         const hist = d.chatHistory || [];
-        // Skip if already the last user entry
+        // Skip if the last user entry already matches
         const lastUser = [...hist].reverse().find(e => e.role === 'user');
         if (lastUser && lastUser.text.toLowerCase().replace(/\s+/g, ' ').trim() === norm) return;
-        hist.push({ role: 'user', text, timestamp: Date.now() });
+        hist.push({ role: 'user', text: cleanText, timestamp: Date.now() });
         const newT = (d.totalMessageCount || 0) + 1;
         await storageSet({ chatHistory: hist, totalMessageCount: newT });
         if (cache) { cache.chatHistory = hist; cache.totalMessageCount = newT; }
-        log('✓ User message saved:', text.substring(0, 60));
+        log('✓ User message saved:', cleanText.substring(0, 60));
       } catch (e) { warn('User msg save error:', e); }
     }
 
@@ -899,9 +938,9 @@
       // --- User turns ---
       const userTurns = parseUserTurns(convText);
       for (const ut of userTurns) {
-        const norm = ut.toLowerCase().replace(/\s+/g, ' ').trim();
-        if (!capturedUserNorms.has(norm)) {
-          await saveUserMsg(ut);
+        const norm = normalizeUser(ut.raw);
+        if (norm && !capturedUserNorms.has(norm)) {
+          await saveUserMsg(ut.clean);
         }
       }
 
@@ -975,7 +1014,7 @@
       const modelTurns = parseModelTurns(convText);
       modelTurns.forEach(t => capturedModelNorms.add(normalize(t.clean)));
       const userTurns = parseUserTurns(convText);
-      userTurns.forEach(t => capturedUserNorms.add(t.toLowerCase().replace(/\s+/g, ' ').trim()));
+      userTurns.forEach(t => capturedUserNorms.add(normalizeUser(t.raw)));
       log('Baseline:', modelTurns.length, 'model +', userTurns.length, 'user turns indexed');
     }, 3000);
 
