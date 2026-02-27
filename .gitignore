@@ -1,0 +1,32 @@
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Node (not used yet, but just in case)
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Chrome extension build artifacts
+*.zip
+*.crx
+*.pem
+dist/
+build/
+release/
+
+# Environment / secrets
+.env
+.env.local
+*.key

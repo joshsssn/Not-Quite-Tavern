@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>NQT</title>
+<style>
+/* ═══════ RESET & THEME ═══════ */
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --surface2: #1c2333;
+  --surface3: #242d3d;
+  --border:   #30363d;
+  --accent:   #58a6ff;
+  --accent2:  #388bfd;
+  --red:      #f85149;
+  --green:    #3fb950;
+  --purple:   #bc8cff;
+  --orange:   #d29922;
+  --yellow:   #e3b341;
+  --text:     #e6edf3;
+  --text2:    #8b949e;
+  --text3:    #484f58;
+  --radius:   8px;
+  --shadow:   0 2px 8px rgba(0,0,0,.3);
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ═══════ SCROLLBAR ═══════ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text3); border-radius: 3px; }
+
+/* ═══════ TOP BAR ═══════ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.topbar .logo { font-weight: 700; font-size: 14px; color: var(--accent); }
+.topbar .spacer { flex: 1; }
+.mem-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 11px;
+  color: var(--text2);
+}
+.mem-pill b { color: var(--accent); font-size: 13px; }
+
+/* ═══════ BUTTONS ═══════ */
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+button:hover { background: var(--surface3); border-color: var(--text3); }
+button.primary { background: var(--accent2); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: var(--accent); }
+button.danger { background: #b62324; border-color: var(--red); }
+button.danger:hover { background: var(--red); }
+button.sm { padding: 2px 8px; font-size: 11px; }
+button.icon-btn { padding: 4px 6px; font-size: 14px; background: transparent; border: none; }
+button.icon-btn:hover { background: var(--surface3); border-radius: 4px; }
+
+/* ═══════ INPUTS ═══════ */
+input, textarea, select {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color .15s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 40px; font-family: inherit; line-height: 1.5; }
+label { display: block; font-size: 11px; color: var(--text2); margin: 6px 0 2px; font-weight: 500; }
+label.inline { display: inline-flex; align-items: center; gap: 4px; margin: 0; cursor: pointer; }
+input[type="checkbox"] { width: auto; accent-color: var(--accent); }
+
+/* ═══════ TABS ═══════ */
+.tab-bar {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.tab-bar button {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text2);
+  font-size: 16px;
+  transition: all .15s;
+}
+.tab-bar button:hover { color: var(--text); background: var(--surface2); }
+.tab-bar button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ═══════ PANELS ═══════ */
+.panels { flex: 1; overflow-y: auto; padding: 12px; }
+.panel { display: none; }
+.panel.active { display: block; animation: fadeIn .2s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity:1; transform: none; } }
+
+/* ═══════ LAYOUT HELPERS ═══════ */
+.row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.row > * { flex: 1; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.sep { border-top: 1px solid var(--border); margin: 12px 0; }
+.gap-sm { margin-bottom: 4px; }
+
+/* ═══════ SECTION ═══════ */
+.section-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text3);
+  margin: 12px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.section-header:first-child { margin-top: 0; }
+
+/* ═══════ CARDS ═══════ */
+.card-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  transition: all .15s;
+  cursor: default;
+}
+.card-item:hover { border-color: var(--text3); }
+.card-item.active { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.card-item .card-header { display: flex; align-items: center; gap: 8px; }
+.card-item .card-name { font-weight: 600; font-size: 13px; flex: 1; }
+.card-item .card-actions { display: flex; gap: 2px; }
+.card-detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.card-detail .info-line { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+.card-detail .info-line b { color: var(--text); font-weight: 500; }
+
+/* ═══════ BADGE ═══════ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.badge.kw   { background: rgba(88,166,255,.15); color: var(--accent); }
+.badge.const{ background: rgba(188,140,255,.15); color: var(--purple); }
+.badge.vec  { background: rgba(63,185,80,.15);  color: var(--green); }
+.badge.on   { background: rgba(63,185,80,.15);  color: var(--green); }
+.badge.off  { background: rgba(248,81,73,.15);  color: var(--red); }
+.badge.count{ background: var(--surface3); color: var(--text2); }
+.badge.sticky   { background: rgba(227,179,65,.15); color: var(--yellow); }
+.badge.cooldown { background: rgba(188,140,255,.15); color: var(--purple); }
+.badge.delay    { background: rgba(209,108,36,.15);  color: var(--orange); }
+
+/* ═══════ FIELD HINTS ═══════ */
+.field-hint {
+  display: block;
+  font-size: 9px;
+  color: var(--text3);
+  margin-top: 2px;
+  line-height: 1.2;
+}
+.timed-desc {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border-left: 2px solid var(--border);
+  border-radius: 0 4px 4px 0;
+}
+.timed-desc b { color: var(--text); }
+
+/* ═══════ TIMED STATUS BLOCK ═══════ */
+.timed-status {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 7px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.timed-status .ts-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 11px;
+}
+.ts-sticky   { background: rgba(227,179,65,.15); color: var(--yellow); }
+.ts-cooldown { background: rgba(188,140,255,.15); color: var(--purple); }
+.ts-delay    { background: rgba(209,108,36,.15);  color: var(--orange); }
+
+/* ═══════ MODE TOGGLE ═══════ */
+.mode-toggle {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mode-btn {
+  padding: 3px 9px;
+  font-size: 13px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all .15s;
+}
+.mode-btn.active {
+  background: var(--surface3);
+  color: var(--text);
+}
+.mode-btn[data-mode="vectorized"].active { color: var(--green); }
+.mode-btn[data-mode="keyword"].active    { color: var(--accent); }
+
+/* ═══════ BOOK / ENTRY ITEMS ═══════ */
+.book-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.book-item:hover { border-color: var(--text3); }
+.book-item .book-header { display: flex; align-items: center; gap: 6px; }
+.book-item .book-name { flex: 1; font-weight: 600; font-size: 13px; }
+
+.entry-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all .15s;
+  font-size: 12px;
+}
+.entry-item:hover { border-color: var(--text3); }
+.entry-item.disabled { opacity: .5; }
+.entry-kw { font-weight: 600; color: var(--text); }
+.entry-preview { color: var(--text2); font-size: 11px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ═══════ EDITOR PANE ═══════ */
+.editor-pane {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-top: 8px;
+  animation: fadeIn .2s;
+}
+.editor-pane h4 { font-size: 12px; color: var(--accent); margin-bottom: 8px; }
+
+/* ═══════ FLAGS ROW ═══════ */
+.flags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+/* ═══════ NOTEBOOK ═══════ */
+.notebook-area {
+  width: 100%;
+  min-height: 250px;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+}
+
+/* ═══════ PROMPT INSPECTOR ═══════ */
+.prompt-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-family: monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 350px;
+  overflow-y: auto;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+/* ═══════ HISTORY ═══════ */
+.hist-item {
+  padding: 8px 10px;
+  border-left: 3px solid var(--border);
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.hist-item.user { border-left-color: var(--accent); }
+.hist-item.model { border-left-color: var(--purple); }
+.hist-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; }
+.hist-time { font-size: 10px; color: var(--text3); float: right; }
+.hist-text { color: var(--text2); font-size: 11px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ═══════ TOKENS ═══════ */
+.tok-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+.tok-row .tok-label { color: var(--text2); }
+.tok-row .tok-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tok-bar-wrap { background: var(--surface); border-radius: 4px; height: 6px; margin-top: 2px; overflow: hidden; }
+.tok-bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--accent)); border-radius: 4px; transition: width .3s; }
+
+/* ═══════ TOAST ═══════ */
+.toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--surface3);
+  color: var(--text);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  transition: transform .3s, opacity .3s;
+  opacity: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* ═══════ EMPTY STATE ═══════ */
+.empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--text3);
+  font-size: 12px;
+}
+.empty .emoji { font-size: 28px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ═══ TOP BAR ═══ -->
+<div class="topbar" style="gap:5px">
+  <span class="logo" style="margin-right:auto">⚔ NQT</span>
+  
+  <div id="masterToggle" title="Extension On/Off" style="display:flex; align-items:center; gap:4px; padding:3px 6px; background:var(--surface2); border:1px solid var(--border); border-radius:15px; cursor:pointer; user-select:none">
+    <div id="masterKnob" style="width:12px; height:12px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); transition:0.2s"></div>
+    <span id="masterStatus" style="font-size:10px; font-weight:700; color:var(--text); letter-spacing:0.5px">ON</span>
+  </div>
+
+  <div class="mem-pill" title="Messages until next memory parse">
+    📨 <b id="memCur">0</b>/<b id="memMax">10</b>
+  </div>
+  <div class="mode-toggle" id="modeToggle">
+    <button class="mode-btn active" id="modeKw" data-mode="keyword" title="Keyword mode — match entries by keywords in chat">🔑</button><button class="mode-btn" id="modeVec" data-mode="vectorized" title="Vector mode — match entries by semantic similarity">🧠</button>
+  </div>
+  <button class="sm" id="btnForceMem" title="Force memory now">🧠</button>
+  <button class="sm danger" id="btnReset" title="Reset conversation">↺</button>
+</div>
+
+<!-- ═══ TABS ═══ -->
+<div class="tab-bar">
+  <button data-tab="cards" class="active" title="Characters">🎭</button>
+  <button data-tab="lore" title="Lorebooks">📚</button>
+  <button data-tab="notes" title="Author's Note">✍️</button>
+  <button data-tab="settings" title="Settings">⚙️</button>
+  <button data-tab="notebook" title="Notebook">📝</button>
+  <button data-tab="inspector" title="Prompt Inspector">🔍</button>
+  <button data-tab="history" title="Chat History">💬</button>
+  <button data-tab="tokens" title="Tokens">📊</button>
+</div>
+
+<!-- ═══ PANELS ═══ -->
+<div class="panels">
+
+<!-- ──────── CARDS ──────── -->
+<div class="panel active" id="panel-cards">
+  <div class="row">
+    <button id="btnNewCard">+ New Card</button>
+    <button id="btnImportCard">Import JSON</button>
+    <input type="file" id="fileCard" accept=".json,.png" hidden>
+  </div>
+  <div id="cardsList"></div>
+  <div id="cardEditor" style="display:none"></div>
+</div>
+
+<!-- ──────── LORE ──────── -->
+<div class="panel" id="panel-lore">
+  <div class="row">
+    <button id="btnNewBook">+ Book</button>
+    <button id="btnImportST">Import ST</button>
+    <button id="btnWrec">⚡ WREC</button>
+    <input type="file" id="fileST" accept=".json" hidden>
+  </div>
+  <div id="booksList"></div>
+  <div id="bookDetail" style="display:none"></div>
+</div>
+
+<!-- ──────── NOTES ──────── -->
+<div class="panel" id="panel-notes">
+  <div class="section-header">Author's Note</div>
+  <textarea id="authorNote" rows="3" placeholder="Injected at specified depth into context..."></textarea>
+  <label>Insertion Depth
+    <input type="number" id="anDepth" min="0" max="99" style="width:70px">
+  </label>
+  <div class="sep"></div>
+  <div class="section-header">Memory Books</div>
+  <p style="font-size:11px;color:var(--text2)">Auto-generated as <code style="color:var(--accent)">🧠 memory_YYYY-MM-DD_HHmm</code>. Edit them in 📚 Lore tab.</p>
+  <div id="memBookList" style="margin-top:8px"></div>
+</div>
+
+<!-- ──────── SETTINGS ──────── -->
+<div class="panel" id="panel-settings">
+  <div class="section-header">API</div>
+  <label>OpenRouter API Key
+    <input id="apiKey" type="password" placeholder="sk-or-v1-...">
+  </label>
+
+  <div class="section-header">Memory</div>
+  <label>Auto-summarize every N model replies
+    <input type="number" id="memInterval" min="1" max="999" style="width:80px">
+  </label>
+
+  <div class="section-header">Lorebook Engine</div>
+  <div class="grid2">
+    <label>Scan Depth<input type="number" id="cfgScanDepth" min="1" max="99"></label>
+    <label>Token Budget<input type="number" id="cfgTokenBudget" min="100" max="99999"></label>
+    <label>Recursion Depth<input type="number" id="cfgRecDepth" min="0" max="20"></label>
+    <label>Vector Threshold<input type="number" id="cfgVecThresh" min="0" max="1" step="0.05"></label>
+  </div>
+  <div class="flags-row">
+    <label class="inline"><input type="checkbox" id="cfgRecursion"> Recursion</label>
+  </div>
+  <label>Vector Model
+    <input id="cfgVecModel" placeholder="Xenova/paraphrase-multilingual-MiniLM-L12-v2">
+  </label>
+  <label>Generation Language (Memory / WREC)
+    <input id="cfgLanguage" placeholder="English, French, Spanish...">
+  </label>
+  <label>Default Trigger Mode
+    <select id="cfgDefaultMode">
+      <option value="keyword">🔑 Keyword — use string matching (fast, no API)</option>
+      <option value="vectorized">🧠 Vectorized — always compute semantic embedding</option>
+    </select>
+  </label>
+
+  <div class="sep"></div>
+  <button class="primary" id="btnSaveSettings">💾 Save Settings</button>
+
+  <div class="sep"></div>
+  <div class="section-header" style="color:var(--red)">Danger Zone</div>
+  <p style="font-size:11px;color:var(--text2);margin-bottom:6px">Wipe ALL extension data (cards, lorebooks, history, settings). Fixes stale data after reinstall.</p>
+  <button class="danger" id="btnFactoryReset">🗑 Factory Reset</button>
+</div>
+
+<!-- ──────── NOTEBOOK ──────── -->
+<div class="panel" id="panel-notebook">
+  <div class="section-header">Notebook</div>
+  <p style="font-size:11px;color:var(--text2);margin-bottom:8px">Persistent scratch-pad. Auto-saved as you type.</p>
+  <textarea id="notebookText" class="notebook-area" rows="15" placeholder="Write anything here..."></textarea>
+</div>
+
+<!-- ──────── INSPECTOR ──────── -->
+<div class="panel" id="panel-inspector">
+  <div class="section-header">Last Assembled Prompt</div>
+  <p style="font-size:11px;color:var(--text2);margin-bottom:8px">The full context injected on your last message.</p>
+  <div class="prompt-box" id="lastPrompt">(no prompt yet)</div>
+  <div class="row" style="margin-top:6px">
+    <button class="sm" id="btnRefreshPrompt">🔄 Refresh</button>
+    <span style="font-size:11px;color:var(--text2)" id="promptTokens"></span>
+  </div>
+
+  <div class="sep"></div>
+  <div class="section-header">🧠 Vector Matcher Test</div>
+  <p style="font-size:11px;color:var(--text2);margin-bottom:8px">Test cosine similarity of a query against all embedded entries.</p>
+  <div class="row">
+    <input id="vecTestInput" placeholder="Type a query… ex: étoile morte">
+    <button id="btnVecTest" style="flex:0;white-space:nowrap">Test 🔍</button>
+  </div>
+  <div id="vecTestResults" style="margin-top:8px"></div>
+</div>
+
+<!-- ──────── HISTORY ──────── -->
+<div class="panel" id="panel-history">
+  <div class="row">
+    <div class="section-header" style="flex:1;margin:0;border:none">Chat History</div>
+    <span style="font-size:11px;color:var(--text2)" id="histCount"></span>
+    <button class="sm danger" id="btnClearHistory">Clear</button>
+  </div>
+  <div id="historyList" style="margin-top:8px"></div>
+</div>
+
+<!-- ──────── TOKENS ──────── -->
+<div class="panel" id="panel-tokens">
+  <div class="section-header">Token Estimates</div>
+  <div id="tokenInfo" style="margin-top:8px"></div>
+</div>
+
+</div><!-- /panels -->
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="../storage.js"></script>
+<script src="sidebar.js"></script>
+</body>
+</html>

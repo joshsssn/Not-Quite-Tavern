@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NQT — Not Quite Tavern</title>
+<style>
+:root{--bg:#1a1a2e;--bg2:#16213e;--bg3:#0f3460;--accent:#e94560;--accent2:#533483;--text:#eee;--text2:#aab;--border:#333;--radius:6px;--green:#4caf50;--orange:#ff9800}
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:420px;min-height:500px;max-height:600px;overflow-y:auto;background:var(--bg);color:var(--text);font:13px/1.4 'Segoe UI',system-ui,sans-serif;padding:8px}
+h3{font-size:14px;margin-bottom:6px;color:var(--accent)}
+button{background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;cursor:pointer;font-size:12px}
+button:hover{background:var(--accent2)}
+button.danger{background:#c0392b;border-color:#e74c3c}
+button.sm{padding:2px 6px;font-size:11px}
+input,textarea,select{background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:4px 6px;width:100%;font-size:12px}
+textarea{resize:vertical;min-height:50px}
+select{padding:3px 4px}
+label{display:block;font-size:11px;color:var(--text2);margin:4px 0 2px}
+.row{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.row>*{flex:1}
+.tabs{display:flex;gap:2px;margin-bottom:8px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:50px;font-size:11px;padding:5px 2px}
+.tabs button.active{background:var(--accent);border-color:var(--accent)}
+.panel{display:none}
+.panel.active{display:block}
+.card-item,.book-item,.entry-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:6px;margin-bottom:4px;cursor:pointer}
+.card-item.active-card{border-color:var(--accent)}
+.entry-item{font-size:11px}
+.badge{background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;font-size:10px}
+.badge.green{background:var(--green)}
+.badge.orange{background:var(--orange)}
+.memory-counter{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:6px;margin-bottom:8px;text-align:center;font-size:12px}
+.memory-counter b{color:var(--accent)}
+.sep{border-top:1px solid var(--border);margin:8px 0}
+.small{font-size:11px;color:var(--text2)}
+details{margin:4px 0}
+details summary{cursor:pointer;font-size:12px;color:var(--accent);margin-bottom:4px}
+.entry-editor{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px;margin-top:4px}
+.inline-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+</style>
+</head>
+<body>
+
+<!-- Memory Counter -->
+<div class="memory-counter" id="memCounter">
+  <b id="memCurrent">0</b> / <b id="memTotal">10</b> messages until next memory parse
+  <div class="row" style="margin-top:4px;justify-content:center">
+    <button id="btnResetConvo" class="danger" style="flex:none">Reset Conv.</button>
+    <button id="btnForceMem" style="flex:none">Force Memory</button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button data-tab="cards" class="active">🎭 Cards</button>
+  <button data-tab="lore">📚 Lore</button>
+  <button data-tab="notes">✍ Notes</button>
+  <button data-tab="settings">⚙</button>
+</div>
+
+<!-- ═══════════ CARDS PANEL ═══════════ -->
+<div class="panel active" id="panel-cards">
+  <div class="row">
+    <button id="btnNewCard">+ New Card</button>
+    <button id="btnImportCard">Import JSON</button>
+    <input type="file" id="fileCard" accept=".json,.png" hidden>
+  </div>
+  <div id="cardsList"></div>
+  <div id="cardEditor" style="display:none">
+    <div class="sep"></div>
+    <label>Name<input id="cName"></label>
+    <label>System Prompt<textarea id="cSystem" rows="3"></textarea></label>
+    <label>Description<textarea id="cDesc" rows="2"></textarea></label>
+    <label>Personality<textarea id="cPersonality" rows="2"></textarea></label>
+    <label>Scenario<textarea id="cScenario" rows="2"></textarea></label>
+    <label>First Message<textarea id="cFirstMsg" rows="2"></textarea></label>
+    <div class="row" style="margin-top:6px">
+      <button id="btnSaveCard">💾 Save</button>
+      <button id="btnDeleteCard" class="danger">🗑 Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ LORE PANEL ═══════════ -->
+<div class="panel" id="panel-lore">
+  <div class="row">
+    <button id="btnNewBook">+ New Book</button>
+    <button id="btnImportST">Import ST JSON</button>
+    <button id="btnWrec">⚡ WREC</button>
+    <input type="file" id="fileST" accept=".json" hidden>
+  </div>
+  <div id="booksList"></div>
+  <div id="bookEditor" style="display:none">
+    <div class="sep"></div>
+    <div class="row">
+      <label>Book Name<input id="bName"></label>
+      <label style="width:auto"><input type="checkbox" id="bEnabled"> Enabled</label>
+    </div>
+    <div class="row">
+      <button id="btnNewEntry">+ Entry</button>
+      <button id="btnDeleteBook" class="danger">🗑 Delete Book</button>
+    </div>
+    <div id="entriesList"></div>
+  </div>
+  <div id="entryEditor" style="display:none"></div>
+</div>
+
+<!-- ═══════════ NOTES PANEL ═══════════ -->
+<div class="panel" id="panel-notes">
+  <h3>Author's Note</h3>
+  <textarea id="authorNote" rows="3" placeholder="Injected at specified depth..."></textarea>
+  <label>AN Depth <input type="number" id="anDepth" min="0" max="99" style="width:60px"></label>
+  <div class="sep"></div>
+  <h3>Memory Books</h3>
+  <p class="small">Memory books are automatically created with name <code>🧠 memory_YYYY-MM-DD_HHmm</code>. Manage them in the Lore tab.</p>
+</div>
+
+<!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<div class="panel" id="panel-settings">
+  <h3>API</h3>
+  <label>OpenRouter Key<input id="apiKey" type="password" placeholder="sk-or-..."></label>
+
+  <div class="sep"></div>
+  <h3>Memory</h3>
+  <label>Summarize every N model replies<input type="number" id="memInterval" min="1" max="999" style="width:60px"></label>
+
+  <div class="sep"></div>
+  <h3>Lorebook Engine</h3>
+  <div class="inline-grid">
+    <label>Scan Depth<input type="number" id="cfgScanDepth" min="1" max="99"></label>
+    <label>Token Budget<input type="number" id="cfgTokenBudget" min="100" max="99999"></label>
+    <label>Recursion Depth<input type="number" id="cfgRecDepth" min="0" max="20"></label>
+    <label>Vector Threshold<input type="number" id="cfgVecThresh" min="0" max="1" step="0.05"></label>
+  </div>
+  <label><input type="checkbox" id="cfgRecursion"> Enable Recursion</label>
+  <label>Vector Model<input id="cfgVecModel" placeholder="Xenova/paraphrase-multilingual-MiniLM-L12-v2"></label>
+
+  <div class="sep"></div>
+  <button id="btnSaveSettings">💾 Save Settings</button>
+</div>
+
+<script src="../storage.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>
