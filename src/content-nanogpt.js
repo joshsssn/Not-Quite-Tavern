@@ -888,24 +888,49 @@
     // Dedup set stores NORMALIZED keys so slight variations don't create duplicates
     const capturedModelNorms = new Set();
     const capturedUserNorms  = new Set();
+    const capturedUserNormsArr = []; // kept as array for prefix-overlap checking
+
+    /**
+     * Returns true if norm should be skipped because it is a truncated/extended
+     * duplicate of something already captured.
+     * - existing.startsWith(norm)  → existing is fuller, new is a prefix → skip
+     * - norm.startsWith(existing)  → new is fuller → remove old, allow new
+     */
+    function checkUserDuplicate(norm) {
+      if (capturedUserNorms.has(norm)) return true; // exact match
+      for (let i = 0; i < capturedUserNormsArr.length; i++) {
+        const ex = capturedUserNormsArr[i];
+        if (ex.startsWith(norm)) return true;      // new is truncated prefix of existing → skip
+        if (norm.startsWith(ex)) {                  // new is fuller than existing → replace
+          capturedUserNorms.delete(ex);
+          capturedUserNormsArr.splice(i, 1);
+          break;
+        }
+      }
+      return false;
+    }
     let pendingClean  = '';
     let pendingStable = 0;
     let wasDisabled   = false;
     let teardown;
 
-    /** Save a cleaned user message to chatHistory (deduped via normalized text). */
+    /** Save a cleaned user message to chatHistory (deduped via normalized text + prefix check). */
     async function saveUserMsg(cleanText) {
       const norm = cleanText.toLowerCase().replace(/\s+/g, ' ').trim();
       if (!norm || norm.length < 1) return;
-      if (capturedUserNorms.has(norm)) return;
+      if (checkUserDuplicate(norm)) return;
       capturedUserNorms.add(norm);
+      capturedUserNormsArr.push(norm);
       try {
         if (!contextAlive()) return;
         const d = await storageGet(['chatHistory', 'totalMessageCount']);
         const hist = d.chatHistory || [];
-        // Skip if the last user entry already matches
+        // Skip if the last user entry already matches (prefix-safe)
         const lastUser = [...hist].reverse().find(e => e.role === 'user');
-        if (lastUser && lastUser.text.toLowerCase().replace(/\s+/g, ' ').trim() === norm) return;
+        if (lastUser) {
+          const lastNorm = lastUser.text.toLowerCase().replace(/\s+/g, ' ').trim();
+          if (lastNorm === norm || lastNorm.startsWith(norm) || norm.startsWith(lastNorm)) return;
+        }
         hist.push({ role: 'user', text: cleanText, timestamp: Date.now() });
         const newT = (d.totalMessageCount || 0) + 1;
         await storageSet({ chatHistory: hist, totalMessageCount: newT });
@@ -939,7 +964,7 @@
       const userTurns = parseUserTurns(convText);
       for (const ut of userTurns) {
         const norm = normalizeUser(ut.raw);
-        if (norm && !capturedUserNorms.has(norm)) {
+        if (norm && !checkUserDuplicate(norm)) {
           await saveUserMsg(ut.clean);
         }
       }
@@ -1014,7 +1039,13 @@
       const modelTurns = parseModelTurns(convText);
       modelTurns.forEach(t => capturedModelNorms.add(normalize(t.clean)));
       const userTurns = parseUserTurns(convText);
-      userTurns.forEach(t => capturedUserNorms.add(normalizeUser(t.raw)));
+      userTurns.forEach(t => {
+        const n = normalizeUser(t.raw);
+        if (n && !capturedUserNorms.has(n)) {
+          capturedUserNorms.add(n);
+          capturedUserNormsArr.push(n);
+        }
+      });
       log('Baseline:', modelTurns.length, 'model +', userTurns.length, 'user turns indexed');
     }, 3000);
 
